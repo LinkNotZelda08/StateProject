@@ -1,14 +1,18 @@
-import pandas
-import plotly.express
-import requests
+import os
+import sys
+
+import pandas  # noqa: F401
+import plotly.express  # noqa: F401
+import requests  # noqa: F401
 import streamlit
-import streamlit.runtime.scriptrunner.magic_funcs
+import streamlit.runtime.scriptrunner.magic_funcs  # noqa: F401
 import streamlit.web.cli as stcli
-import os, sys
+
 
 def resolve_path(path):
     resolved_path = os.path.abspath(os.path.join(os.getcwd(), path))
     return resolved_path
+
 
 if __name__ == "__main__":
     sys.argv = [
