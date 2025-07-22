@@ -229,6 +229,5 @@ def main():
     st.write("\n\n\n")
     st.write("Happy data analysis!\n\n-Link")
 
-
 if __name__ == "__main__":
     main()
