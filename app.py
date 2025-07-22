@@ -9,11 +9,18 @@ if "refresh_counter" not in st.session_state:
 
 
 class SingleState:
-    def __init__(self, code, fname, default_value: int, invert: bool):
+    def __init__(self, code: str, fname: str, category: str, sname: str, default_value: int, invert: bool, states: dict):
         self.code = code
         self.fname = fname
+        self.category = category
+        self.sname = sname
         self.default_value = default_value
         self.invert = invert
+        try:
+            states[self.category].append(self)
+        except KeyError:
+            states[self.category] = []
+            states[self.category].append(self)
 
     @st.cache_data
     def process(_self, code, default_value, invert):
@@ -52,26 +59,32 @@ class SingleState:
 
 
 class MultiState:
-    def __init__(self, states: list, codeget: list, refresh_counter):
+    def __init__(self, states: dict, codeget: list, refresh_counter):
         self.states = states
         if codeget != "":
             trans = listdecode(codeget)
             for i in range(len(states)):
                 self.states[i].default_value = trans[i]
+        self.states = dict(sorted(self.states.items()))
         for i in self.states:
-            i.val = st.sidebar.number_input(
-                i.fname, 0, 1000, i.default_value, key=f"{i.fname}_{refresh_counter}"
-            )
-            i.df = i.process(i.code, i.val, i.invert)
+            self.states[i] = sorted(self.states[i], key=lambda item: item.fname)
+        for p in self.states:
+            st.sidebar.subheader(p)
+            for i in self.states[p]:
+                i.val = st.sidebar.number_input(
+                    i.fname, 0, 1000, i.default_value, key=f"{i.fname}_{refresh_counter}"
+                )
+                i.df = i.process(i.code, i.val, i.invert)
         self.df = self.process()
 
     def process(self):
         data = SingleState.msh()
-        for i in self.states:
-            data = data.merge(i.df[["NAME", "score"]], on="NAME")
-            data["score"] = data["score_x"] + data["score_y"]
-            data = data.drop(columns=["score_x", "score_y"])
-        data = data.sort_values(by=["score", "NAME"]).iloc[::-1]
+        for p in self.states.values():
+            for i in p:
+                data = data.merge(i.df[["NAME", "score"]], on="NAME")
+                data["score"] = data["score_x"] + data["score_y"]
+                data = data.drop(columns=["score_x", "score_y"])
+            data = data.sort_values(by=["score", "NAME"]).iloc[::-1]
         return data
 
 
@@ -175,11 +188,10 @@ def listencode(array: list):
     return final
 
 
-def listdecode(code: int):
-    code2 = str(code)
+def listdecode(code: str):
     final = []
-    for i in range(0, len(code2), 2):
-        final.append(decode(code2[i : i + 2]))
+    for i in range(0, len(code), 2):
+        final.append(decode(code[i : i + 2]))
     return final
 
 
@@ -192,17 +204,17 @@ def main():
         submitted = st.form_submit_button("Apply", use_container_width=True)
         if submitted:
             st.session_state.refresh_counter += 1
-    states = []
-    employment_status = SingleState("S2301_C04_001E", "Unemployment Rates", 100, True)
-    states.append(employment_status)
-    educational_attainment = SingleState(
-        "S1501_C02_015E", "Educational Attainment Rates", 100, False
-    )
-    states.append(educational_attainment)
-    states = sorted(states, key=lambda s: s.fname)
+    states = {}
+    SingleState("S1501_C02_014E", "Percent of population 25+ with high school degree or higher", "Education", "high school degree", 0, False, states)
+    SingleState("S1501_C02_015E", "Percent of population 25+ with bachelor's degree or higher", "Education", "bachelor's degree", 100, False, states)
+    SingleState("S1501_C02_013E", "Percent of population 25+ with graduate degree or higher", "Education", "graduate degree", 0, False, states)
+    SingleState("S2701_C05_001E", "Percent of population without health insurance", "Healthcare", "health insurance", 100, True, states)
+    SingleState("S1901_C01_012E", "Median household income in the past 12 months", "Economy", "household income median", 100, False, states)
+    SingleState("S1901_C01_013E", "Mean household income in the past 12 months", "Economy", "household income mean", 0, False, states)
+    SingleState("S2301_C04_001E", "Unemployment rates for 16+", "Economy", "unemployment rates", 100, True, states)
     big = MultiState(states, codeget, st.session_state.refresh_counter)
     graph(big)
-    st.sidebar.text(f"Your current code is {listencode([i.val for i in states])}")
+    st.sidebar.text(f"Your current code is {listencode([state.val for state_list in states.values() for state in state_list])}")
     st.subheader("How do the calculations work?")
     st.write(
         "This program uses a function called [min-max normalization](https://en.wikipedia.org/wiki/Feature_scaling#Rescaling_(min-max_normalization)) to rescale all values in a list within a given range based on the maximum and minimum values. For example, let’s say that we wanted to scale [a state-by-state list detailing the percentage of the population 25 and older who have bachelor's degrees or higher taken from the U.S. Census Bureau](https://api.census.gov/data/2023/acs/acs1/subject?get=NAME,S1501_C02_015E&for=state:*). The highest percentage is Massachusetts at 47.8%. The lowest is West Virginia at 24%. Let’s say our range is [0,42]. Our function would be:"
@@ -212,7 +224,7 @@ def main():
         "<center><caption>It really is a beautiful function, isn't it?</caption></center>"
     )
     st.write(
-        "Massachusetts becomes 42, West Virginia becomes 0, and all other states fall in between! If you doubt it, try the math yourself. (Or type “1600” into the box that says “If you have a code, put it here!” to save some time but I’ll get there.)"
+        "Massachusetts becomes 42, West Virginia becomes 0, and all other states fall in between! If you doubt it, try the math yourself."
     )
     st.subheader("Why is this necessary?")
     st.write(
@@ -228,6 +240,7 @@ def main():
     )
     st.write("\n\n\n")
     st.write("Happy data analysis!\n\n-Link")
+
 
 if __name__ == "__main__":
     main()
