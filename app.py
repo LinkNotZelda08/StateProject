@@ -9,11 +9,32 @@ if "refresh_counter" not in st.session_state:
 
 
 class SingleState:
-    def __init__(self, code: str, fname: str, category: str, sname: str, default_value: int, invert: bool, states: dict):
+    def __init__(
+        self,
+        code: str,
+        friendly_name: str,
+        category: str,
+        sorting_name: str,
+        default_value: int,
+        invert: bool,
+        states: dict,
+    ):
+        """
+        Initializes a SingleState object and adds it to a dictionary based on its category. If that category is not present in the dictionary, one is created.
+
+        Args:
+            code (str): The specific code that identifies the table to take US Census data from
+            friendly_name (str): The name that will be shown along with a number input associated with this object on the Streamlit webpage
+            category (str): The category that the SingleState falls under that will be shown on Streamlit
+            sorting_name (str): The name that will be used for sorting all SingleState objects alphabetically within a specific category
+            default_value (int): The default value that will be associated with the input on Streamlit
+            invert (bool): Indicates if the function is inverse or not
+            states (dict): The dictionary that the SingleState object is added to
+        """
         self.code = code
-        self.fname = fname
+        self.friendly_name = friendly_name
         self.category = category
-        self.sname = sname
+        self.sorting_name = sorting_name
         self.default_value = default_value
         self.invert = invert
         try:
@@ -24,6 +45,17 @@ class SingleState:
 
     @st.cache_data
     def process(_self, code, default_value, invert):
+        """
+        Processes the data of a US Census table specified by the associated code argument.
+
+        Args:
+            code (str): The specific code that identifies the table to take US Census data from
+            default_value (int): The default value that will be associated with the input on Streamlit
+            invert (bool): Indicates if the function is inverse or not
+
+        Returns:
+            DataFrame: A Pandas DataFrame with columns of state name, the original stat from the table, the ANSI code of each state, and the converted score after min-max scaling
+        """
         response = requests.get(
             f"https://api.census.gov/data/2023/acs/acs1/subject?get=NAME,{code}&for=state:*"
         )
@@ -45,6 +77,12 @@ class SingleState:
 
     @st.cache_data
     def msh():
+        """
+        Returns a template Pandas DataFrame with state names and ANSI codes, but zeroed stat and score columns.
+
+        Returns:
+            DataFrame: a template Pandas DataFrame with state names and ANSI codes, but zeroed stat and score columns.
+        """
         response = requests.get(
             "https://api.census.gov/data/2023/acs/acs1/subject?get=NAME,S1501_C02_015E&for=state:*"
         )
@@ -59,25 +97,42 @@ class SingleState:
 
 
 class MultiState:
-    def __init__(self, states: dict, codeget: list, refresh_counter):
+    def __init__(self, states: dict, codeget: str, refresh_counter: int):
+        """
+        Creates a MultiState object based on the SingleStates contained within the states arg
+
+        Args:
+            states (str): A dictionary that holds the invidual SingleState objects by their category names
+            codeget (str): The value of the code inputted in the text box on the Streamlit page
+            refresh_counter (int): A value that counts the number of times the Streamlit app has rerun
+        """
         self.states = states
         if codeget != "":
             trans = listdecode(codeget)
             for i in range(len(states)):
                 self.states[i].default_value = trans[i]
         self.states = dict(sorted(self.states.items()))
-        for i in self.states:
-            self.states[i] = sorted(self.states[i], key=lambda item: item.fname)
         for p in self.states:
+            self.states[i] = sorted(self.states[i], key=lambda item: item.friendly_name)
             st.sidebar.subheader(p)
             for i in self.states[p]:
                 i.val = st.sidebar.number_input(
-                    i.fname, 0, 1000, i.default_value, key=f"{i.fname}_{refresh_counter}"
+                    i.friendly_name,
+                    0,
+                    1000,
+                    i.default_value,
+                    key=f"{i.friendly_name}_{refresh_counter}",
                 )
                 i.df = i.process(i.code, i.val, i.invert)
         self.df = self.process()
 
     def process(self):
+        """
+        Creates a DataFrame template and adds the score values of every SingleState object within the states arg
+
+        Returns:
+            DataFrame: A Pandas DataFrame with the combined score values of the SingleStates within the states arg
+        """
         data = SingleState.msh()
         for p in self.states.values():
             for i in p:
@@ -88,7 +143,13 @@ class MultiState:
         return data
 
 
-def graph(state: SingleState):
+def graph(state: MultiState):
+    """
+    Creates a map based on the values of the state arg
+
+    Args:
+        states (MultiState): The MultiState object that the values of the graph will be derived from
+    """
     us_state_to_abbrev = {
         "Alabama": "AL",
         "Alaska": "AK",
@@ -163,6 +224,15 @@ def graph(state: SingleState):
 
 
 def minmax_scale(array: list, values: tuple):
+    """
+    Takes in a list, then returns a list with all of the objects within min max scaled
+
+    Args:
+        array (list): The list that is to be min max scaled
+        values (tuple): The range of the returned list
+    Returns:
+        list: A min max scaled list based on the array arg
+    """
     mini = min(array)
     maxi = max(array)
     final = [
@@ -173,15 +243,39 @@ def minmax_scale(array: list, values: tuple):
 
 
 def encode(num: str):
+    """
+    Base36 encodes a number
+
+    Args:
+        num (str): The number to be encoded
+    Returns:
+        str: The encoded string
+    """
     encoded = br(num, 36)
     return encoded.zfill(2)
 
 
-def decode(num):
+def decode(num: str):
+    """
+    Decodes a number from Base36
+
+    Args:
+        num (str): The string to be decoded
+    Returns:
+        str: The decoded number
+    """
     return int(num, 36)
 
 
 def listencode(array: list):
+    """
+    Encodes a series of numbers from a list into Base36
+
+    Args:
+        array (list): The list holding the numbers to be encoded
+    Returns:
+        str: A string containing the encoded numbers
+    """
     final = ""
     for i in array:
         final += encode(i)
@@ -189,6 +283,14 @@ def listencode(array: list):
 
 
 def listdecode(code: str):
+    """
+    Decodes a series of numbers from a list out of Base36
+
+    Args:
+        code (str): The string to be decoded
+    Returns:
+        list: A list of the decoded numbers
+    """
     final = []
     for i in range(0, len(code), 2):
         final.append(decode(code[i : i + 2]))
@@ -205,16 +307,74 @@ def main():
         if submitted:
             st.session_state.refresh_counter += 1
     states = {}
-    SingleState("S1501_C02_014E", "Percent of population 25+ with high school degree or higher", "Education", "high school degree", 0, False, states)
-    SingleState("S1501_C02_015E", "Percent of population 25+ with bachelor's degree or higher", "Education", "bachelor's degree", 100, False, states)
-    SingleState("S1501_C02_013E", "Percent of population 25+ with graduate degree or higher", "Education", "graduate degree", 0, False, states)
-    SingleState("S2701_C05_001E", "Percent of population without health insurance", "Healthcare", "health insurance", 100, True, states)
-    SingleState("S1901_C01_012E", "Median household income in the past 12 months", "Economy", "household income median", 100, False, states)
-    SingleState("S1901_C01_013E", "Mean household income in the past 12 months", "Economy", "household income mean", 0, False, states)
-    SingleState("S2301_C04_001E", "Unemployment rates for 16+", "Economy", "unemployment rates", 100, True, states)
+    SingleState(
+        "S1501_C02_014E",
+        "Percent of population 25+ with high school degree or higher",
+        "Education",
+        "high school degree",
+        0,
+        False,
+        states,
+    )
+    SingleState(
+        "S1501_C02_015E",
+        "Percent of population 25+ with bachelor's degree or higher",
+        "Education",
+        "bachelor's degree",
+        100,
+        False,
+        states,
+    )
+    SingleState(
+        "S1501_C02_013E",
+        "Percent of population 25+ with graduate degree or higher",
+        "Education",
+        "graduate degree",
+        0,
+        False,
+        states,
+    )
+    SingleState(
+        "S2701_C05_001E",
+        "Percent of population without health insurance",
+        "Healthcare",
+        "health insurance",
+        100,
+        True,
+        states,
+    )
+    SingleState(
+        "S1901_C01_012E",
+        "Median household income in the past 12 months",
+        "Economy",
+        "household income median",
+        100,
+        False,
+        states,
+    )
+    SingleState(
+        "S1901_C01_013E",
+        "Mean household income in the past 12 months",
+        "Economy",
+        "household income mean",
+        0,
+        False,
+        states,
+    )
+    SingleState(
+        "S2301_C04_001E",
+        "Unemployment rates for 16+",
+        "Economy",
+        "unemployment rates",
+        100,
+        True,
+        states,
+    )
     big = MultiState(states, codeget, st.session_state.refresh_counter)
     graph(big)
-    st.sidebar.text(f"Your current code is {listencode([state.val for state_list in states.values() for state in state_list])}")
+    st.sidebar.text(
+        f"Your current code is {listencode([state.val for state_list in states.values() for state in state_list])}"
+    )
     st.subheader("How do the calculations work?")
     st.write(
         "This program uses a function called [min-max normalization](https://en.wikipedia.org/wiki/Feature_scaling#Rescaling_(min-max_normalization)) to rescale all values in a list within a given range based on the maximum and minimum values. For example, let’s say that we wanted to scale [a state-by-state list detailing the percentage of the population 25 and older who have bachelor's degrees or higher taken from the U.S. Census Bureau](https://api.census.gov/data/2023/acs/acs1/subject?get=NAME,S1501_C02_015E&for=state:*). The highest percentage is Massachusetts at 47.8%. The lowest is West Virginia at 24%. Let’s say our range is [0,42]. Our function would be:"
