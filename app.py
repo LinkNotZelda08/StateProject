@@ -4,6 +4,9 @@ import requests
 import streamlit as st
 from numpy import base_repr as br
 
+if "refresh_counter" not in st.session_state:
+    st.session_state.refresh_counter = 0
+
 
 class SingleState:
     def __init__(self, code, fname, default_value: int, invert: bool):
@@ -11,14 +14,6 @@ class SingleState:
         self.fname = fname
         self.default_value = default_value
         self.invert = invert
-
-    @st.cache_data
-    def namemkr(code):
-        response = requests.get(
-            f"https://api.census.gov/data/2023/acs/acs1/subject/variables/{code}.json"
-        )
-        data = response.json()
-        return data["label"]
 
     @st.cache_data
     def process(_self, code, default_value, invert):
@@ -31,7 +26,7 @@ class SingleState:
         data = [[i[0], float(i[1]), int(i[2])] for i in data]
         stat = [i[1] for i in data]
         if invert:
-            stat = [100 - i for i in minmax_scale(stat, (0, default_value))]
+            stat = minmax_scale(stat, (default_value, 0))
         else:
             stat = minmax_scale(stat, (0, default_value))
         for i in range(len(data)):
@@ -57,14 +52,16 @@ class SingleState:
 
 
 class MultiState:
-    def __init__(self, states: list, codeget: list):
+    def __init__(self, states: list, codeget: list, refresh_counter):
         self.states = states
         if codeget != "":
             trans = listdecode(codeget)
             for i in range(len(states)):
                 self.states[i].default_value = trans[i]
         for i in self.states:
-            i.val = st.sidebar.number_input(i.fname, 0, 1000, i.default_value)
+            i.val = st.sidebar.number_input(
+                i.fname, 0, 1000, i.default_value, key=f"{i.fname}_{refresh_counter}"
+            )
             i.df = i.process(i.code, i.val, i.invert)
         self.df = self.process()
 
@@ -190,7 +187,11 @@ def main():
     st.set_page_config(page_title="Main State Page")
     st.title("Main State Page")
     st.sidebar.header("Main State Page")
-    codeget = st.sidebar.text_input("If you have a code, put it here!")
+    with st.sidebar.form("code_form"):
+        codeget = st.text_input("If you have a code, put it here!")
+        submitted = st.form_submit_button("Apply", use_container_width=True)
+        if submitted:
+            st.session_state.refresh_counter += 1
     states = []
     employment_status = SingleState("S2301_C04_001E", "Unemployment Rates", 100, True)
     states.append(employment_status)
@@ -199,7 +200,7 @@ def main():
     )
     states.append(educational_attainment)
     states = sorted(states, key=lambda s: s.fname)
-    big = MultiState(states, codeget)
+    big = MultiState(states, codeget, st.session_state.refresh_counter)
     graph(big)
     st.sidebar.text(f"Your current code is {listencode([i.val for i in states])}")
 
