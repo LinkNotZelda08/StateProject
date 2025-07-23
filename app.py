@@ -113,7 +113,7 @@ class MultiState:
                 self.states[i].default_value = trans[i]
         self.states = dict(sorted(self.states.items()))
         for p in self.states:
-            self.states[i] = sorted(self.states[i], key=lambda item: item.friendly_name)
+            self.states[p] = sorted(self.states[p], key=lambda item: item.friendly_name)
             st.sidebar.subheader(p)
             for i in self.states[p]:
                 i.val = st.sidebar.number_input(
