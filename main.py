@@ -4,8 +4,7 @@ import requests
 import streamlit as st
 from numpy import base_repr as br
 
-if "refresh_counter" not in st.session_state:
-    st.session_state.refresh_counter = 0
+from storeandload import load_value, store_value
 
 
 class SingleState:
@@ -17,7 +16,7 @@ class SingleState:
         sorting_name: str,
         default_value: int,
         invert: bool,
-        states: dict,
+        states: str,
     ):
         """
         Initializes a SingleState object and adds it to a dictionary based on its category. If that category is not present in the dictionary, one is created.
@@ -31,17 +30,25 @@ class SingleState:
             invert (bool): Indicates if the function is inverse or not
             states (dict): The dictionary that the SingleState object is added to
         """
+        saved_value = default_value
+        for i in st.session_state[f"_{states}"].values():
+            for p in i:
+                if p.code == code and hasattr(p, "val"):
+                    saved_value = p.val
+                    break
+        for i in st.session_state[f"_{states}"].values():
+            i[:] = [p for p in i if p.code != code]
         self.code = code
         self.friendly_name = friendly_name
         self.category = category
         self.sorting_name = sorting_name
-        self.default_value = default_value
+        self.default_value = saved_value
         self.invert = invert
         try:
-            states[self.category].append(self)
-        except KeyError:
-            states[self.category] = []
-            states[self.category].append(self)
+            st.session_state[f"_{states}"][category].append(self)
+        except:
+            st.session_state[f"_{states}"][category] = []
+            st.session_state[f"_{states}"][category].append(self)
 
     @st.cache_data
     def process(_self, code, default_value, invert):
@@ -97,7 +104,7 @@ class SingleState:
 
 
 class MultiState:
-    def __init__(self, states: dict, codeget: str, refresh_counter: int):
+    def __init__(self, states: str, codeget: str, codeinput: bool):
         """
         Creates a MultiState object based on the SingleStates contained within the states arg
 
@@ -106,27 +113,54 @@ class MultiState:
             codeget (str): The value of the code inputted in the text box on the Streamlit page
             refresh_counter (int): A value that counts the number of times the Streamlit app has rerun
         """
-        self.states = states
-        if codeget != "":
-            trans = listdecode(codeget)
-            for i in range(len(states)):
-                self.states[i].default_value = trans[i]
-        self.states = dict(sorted(self.states.items()))
-        for p in self.states:
-            self.states[p] = sorted(self.states[p], key=lambda item: item.friendly_name)
+        st.session_state[f"_{states}"] = dict(
+            sorted(st.session_state[f"_{states}"].items())
+        )
+        for p in st.session_state[f"_{states}"]:
+            st.session_state[f"_{states}"][p] = sorted(
+                st.session_state[f"_{states}"][p], key=lambda item: item.friendly_name
+            )
+        self.create_inputs(states)
+        if codeinput:
+            if codeget != "":
+                count = 0
+                trans = listdecode(codeget)
+                for i in st.session_state[f"_{states}"].values():
+                    for p in i:
+                        p.val = trans[count]
+                        count += 1
+        self.df = self.process(states)
+
+    def create_inputs(_self, states):
+        maxhelp = st.session_state["max_points_value"]
+        usedhelp = sum(
+            [
+                p.default_value
+                for i in st.session_state[f"_{states}"].values()
+                for p in i
+            ]
+        )
+        lefthelp = maxhelp - usedhelp
+        for p in st.session_state[f"_{states}"]:
             st.sidebar.subheader(p)
-            for i in self.states[p]:
-                i.val = st.sidebar.number_input(
+
+            def change_number(i):
+                i.val = st.session_state[i.friendly_name]
+
+            for i in st.session_state[f"_{states}"][p]:
+                st.sidebar.number_input(
                     i.friendly_name,
                     0,
-                    1000,
+                    i.default_value + lefthelp,
                     i.default_value,
-                    key=f"{i.friendly_name}_{refresh_counter}",
+                    key=i.friendly_name,
+                    on_change=change_number,
+                    args=[i],
                 )
+                i.val = st.session_state[i.friendly_name]
                 i.df = i.process(i.code, i.val, i.invert)
-        self.df = self.process()
 
-    def process(self):
+    def process(self, states):
         """
         Creates a DataFrame template and adds the score values of every SingleState object within the states arg
 
@@ -134,7 +168,7 @@ class MultiState:
             DataFrame: A Pandas DataFrame with the combined score values of the SingleStates within the states arg
         """
         data = SingleState.msh()
-        for p in self.states.values():
+        for p in st.session_state[f"_{states}"].values():
             for i in p:
                 data = data.merge(i.df[["NAME", "score"]], on="NAME")
                 data["score"] = data["score_x"] + data["score_y"]
@@ -297,16 +331,24 @@ def listdecode(code: str):
     return final
 
 
+def inputchange(codeinput):
+    codeinput = True
+
+
 def main():
-    st.set_page_config(page_title="Main State Page")
+    st.session_state.refresh_counter += 1
+    codeinput = False
     st.title("Main State Page")
-    st.sidebar.header("Main State Page")
+    load_value("states")
     with st.sidebar.form("code_form"):
         codeget = st.text_input("If you have a code, put it here!")
         submitted = st.form_submit_button("Apply", use_container_width=True)
         if submitted:
-            st.session_state.refresh_counter += 1
-    states = {}
+            inputchange(codeinput)
+            st.rerun()
+    max = st.sidebar.subheader("Max points: ")
+    used = st.sidebar.subheader("Used points: ")
+    left = st.sidebar.subheader("Points left: ")
     SingleState(
         "S1501_C02_014E",
         "Percent of population 25+ with high school degree or higher",
@@ -314,16 +356,16 @@ def main():
         "high school degree",
         0,
         False,
-        states,
+        "states",
     )
     SingleState(
         "S1501_C02_015E",
         "Percent of population 25+ with bachelor's degree or higher",
         "Education",
         "bachelor's degree",
-        100,
+        0,
         False,
-        states,
+        "states",
     )
     SingleState(
         "S1501_C02_013E",
@@ -332,25 +374,25 @@ def main():
         "graduate degree",
         0,
         False,
-        states,
+        "states",
     )
     SingleState(
         "S2701_C05_001E",
         "Percent of population without health insurance",
         "Healthcare",
         "health insurance",
-        100,
+        0,
         True,
-        states,
+        "states",
     )
     SingleState(
         "S1901_C01_012E",
         "Median household income in the past 12 months",
         "Economy",
         "household income median",
-        100,
+        0,
         False,
-        states,
+        "states",
     )
     SingleState(
         "S1901_C01_013E",
@@ -359,47 +401,28 @@ def main():
         "household income mean",
         0,
         False,
-        states,
+        "states",
     )
     SingleState(
         "S2301_C04_001E",
         "Unemployment rates for 16+",
         "Economy",
         "unemployment rates",
-        100,
+        0,
         True,
-        states,
+        "states",
     )
-    big = MultiState(states, codeget, st.session_state.refresh_counter)
-    graph(big)
+    big = MultiState("states", codeget, 7)
+    store_value("states")
     st.sidebar.text(
-        f"Your current code is {listencode([state.val for state_list in states.values() for state in state_list])}"
+        f"Your current code is {listencode([p.val for i in st.session_state.states.values() for p in i])}"
     )
-    st.subheader("How do the calculations work?")
-    st.write(
-        "This program uses a function called [min-max normalization](https://en.wikipedia.org/wiki/Feature_scaling#Rescaling_(min-max_normalization)) to rescale all values in a list within a given range based on the maximum and minimum values. For example, let’s say that we wanted to scale [a state-by-state list detailing the percentage of the population 25 and older who have bachelor's degrees or higher taken from the U.S. Census Bureau](https://api.census.gov/data/2023/acs/acs1/subject?get=NAME,S1501_C02_015E&for=state:*). The highest percentage is Massachusetts at 47.8%. The lowest is West Virginia at 24%. Let’s say our range is [0,42]. Our function would be:"
-    )
-    st.latex(r""" x'=\frac{42\left(x-24\right)}{23.8} """)
-    st.html(
-        "<center><caption>It really is a beautiful function, isn't it?</caption></center>"
-    )
-    st.write(
-        "Massachusetts becomes 42, West Virginia becomes 0, and all other states fall in between! If you doubt it, try the math yourself."
-    )
-    st.subheader("Why is this necessary?")
-    st.write(
-        "Imagine that we wanted to aggregate data from the previously mentioned survey along with another that details a state-by-state list detailing the number of people within 100,000 below the 100% poverty level, also from the U.S. Census Bureau. It would be impossible to aggregate these two data sets without converting one into the same metric as the other, and this becomes exponentially more difficult as more lists are added. By converting them all with [min-max normalization](https://en.wikipedia.org/wiki/Feature_scaling#Rescaling_(min-max_normalization)), we address this problem. \n\nSome metrics are also what I choose to call “inverse” functions. By this I mean that a lower number is actually good, and a higher number is bad. [Min-max normalization](https://en.wikipedia.org/wiki/Feature_scaling#Rescaling_(min-max_normalization)) easily addresses this by simply inverting the range of the function (i.e. [0,42] -> [42,0]), and now plugging in a higher value produces a lower result."
-    )
-    st.subheader("What are the benefits?")
-    st.write(
-        "This system allows you to individually control the weighting of each category. Say you care more about poverty levels compared to the bachelor’s degrees. Set the range of the poverty min-max function to [0,200] (or rather [200,0] because it's inverse) and the range of the bachelor’s degree function to [0,100], and poverty is worth double the weight of bachelor’s degrees! If you wanted to get rid of the bachelor’s degrees entirely, set the range to [0,0]. [Min-max normalization](https://en.wikipedia.org/wiki/Feature_scaling#Rescaling_(min-max_normalization)) allows for a degree of granularity otherwise not possible."
-    )
-    st.subheader("How do I use it?")
-    st.write(
-        "On the left, there should be a few titled boxes to input numbers. You can input any number between 1 and 1000, and I invite you to do so now if you haven’t already. When you input a number in that box, you are changing the maximum [or minimum if the data set is inverse] of the function to the inputted value. You should see the graph on the right update in response. The graph on the right is called a [choropleth map](https://en.wikipedia.org/wiki/Choropleth_map) ([despite the visual similarity, it is not a heat map](https://www.standardco.de/notes/heatmaps-vs-choropleths)). The intensity of the blue color in each state on the map is inversely proportional to its score value (calculated by adding up the points it received in each category on the left based on your input ranges). Essentially, lighter blue = better score. You can see the specific score associated with each state by hovering over said state, along with zooming and moving around the map. When you changed those variables, you also should have noticed the text at the bottom that says “Your current code is XXXX” change. This code system is designed to facilitate easy retention and distribution of scores among others despite the fact that this is a web app primarily. This code is based off of the numbers you input into the boxes on the left. At this point I invite you to remember or copy your code, refresh the page, input the code into the box that says “If you have a code, put it here!”, and press enter on your keyboard or hit “Apply.” You should see numbers identical to the ones before refreshing your page!"
-    )
-    st.write("\n\n\n")
-    st.write("Happy data analysis!\n\n-Link")
+    maxhelp = st.session_state["max_points_value"]
+    usedhelp = sum([p.val for i in st.session_state["states"].values() for p in i])
+    max.subheader(f"Max points: {maxhelp}")
+    used.subheader(f"Used points: {usedhelp}")
+    left.subheader(f"Points left: {maxhelp - usedhelp}")
+    graph(big)
 
 
 if __name__ == "__main__":
