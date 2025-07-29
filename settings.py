@@ -29,7 +29,6 @@ def gdbint(
     disable = st.session_state.get(f"_{key1}", False) and not disable
     if st.toggle(
         togtext,
-        value=st.session_state.get(f"_{key1}", False),
         key=f"_{key1}",
         on_change=store_value,
         args=[key1],
