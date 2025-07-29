@@ -104,7 +104,7 @@ class SingleState:
 
 
 class MultiState:
-    def __init__(self, states: str, codeget: str, codeinput: bool):
+    def __init__(self, states: str, codeget: str):
         """
         Creates a MultiState object based on the SingleStates contained within the states arg
 
@@ -121,14 +121,13 @@ class MultiState:
                 st.session_state[f"_{states}"][p], key=lambda item: item.friendly_name
             )
         self.create_inputs(states)
-        if codeinput:
-            if codeget != "":
-                count = 0
-                trans = listdecode(codeget)
-                for i in st.session_state[f"_{states}"].values():
-                    for p in i:
-                        p.val = trans[count]
-                        count += 1
+        if codeget != "":
+            count = 0
+            trans = listdecode(codeget)
+            for i in st.session_state[f"_{states}"].values():
+                for p in i:
+                    p.val = trans[count]
+                    count += 1
         self.df = self.process(states)
 
     def create_inputs(_self, states):
@@ -330,21 +329,14 @@ def listdecode(code: str):
         final.append(decode(code[i : i + 2]))
     return final
 
-
-def inputchange(codeinput):
-    codeinput = True
-
-
 def main():
     st.session_state.refresh_counter += 1
-    codeinput = False
     st.title("Main State Page")
     load_value("states")
     with st.sidebar.form("code_form"):
         codeget = st.text_input("If you have a code, put it here!")
         submitted = st.form_submit_button("Apply", use_container_width=True)
         if submitted:
-            inputchange(codeinput)
             st.rerun()
     max = st.sidebar.subheader("Max points: ")
     used = st.sidebar.subheader("Used points: ")
@@ -412,7 +404,7 @@ def main():
         True,
         "states",
     )
-    big = MultiState("states", codeget, 7)
+    big = MultiState("states", codeget)
     store_value("states")
     st.sidebar.text(
         f"Your current code is {listencode([p.val for i in st.session_state.states.values() for p in i])}"
