@@ -172,7 +172,7 @@ class MultiState:
                 data = data.merge(i.df[["NAME", "score"]], on="NAME")
                 data["score"] = data["score_x"] + data["score_y"]
                 data = data.drop(columns=["score_x", "score_y"])
-            data = data.sort_values(by=["score", "NAME"]).iloc[::-1]
+            data = data.sort_values(by=["score", "NAME"])
         return data
 
 
@@ -252,6 +252,10 @@ def graph(state: MultiState):
         scope="usa",
         hover_name="NAME",
         hover_data={"score": True, "state_code": False},
+        color_continuous_scale=st.session_state["graph_cscale_value"],
+    )
+    fig.update_layout(
+        geo=dict(bgcolor="#0e1117"),
     )
     st.plotly_chart(fig)
 
@@ -328,6 +332,7 @@ def listdecode(code: str):
     for i in range(0, len(code), 2):
         final.append(decode(code[i : i + 2]))
     return final
+
 
 def main():
     st.session_state.refresh_counter += 1
@@ -415,6 +420,18 @@ def main():
     used.subheader(f"Used points: {usedhelp}")
     left.subheader(f"Points left: {maxhelp - usedhelp}")
     graph(big)
+    st.dataframe(
+        big.df,
+        hide_index=True,
+        column_order=["NAME", "score"],
+        column_config={
+            "NAME": "State Name",
+            "score": st.column_config.NumberColumn(
+                "Total Score", format=f"%.{st.session_state['table_round_value']}f"
+            ),
+        },
+        on_select="ignore",
+    )
 
 
 if __name__ == "__main__":

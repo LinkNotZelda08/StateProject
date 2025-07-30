@@ -1,3 +1,4 @@
+import plotly.express as px
 import streamlit as st
 
 from storeandload import load_value, store_value
@@ -17,16 +18,18 @@ def gdbint(
     min: int,
     max: int,
     default: int,
-    states: dict,
 ):
     load_value(key1)
     load_value(key2)
     load_value(key3)
-    currentuse = sum(
-        [p.default_value for i in st.session_state["_states"].values() for p in i]
-    )
-    disable = currentuse <= default
-    disable = st.session_state.get(f"_{key1}", False) and not disable
+    if key1 == "max_points_toggle":
+        currentuse = sum(
+            [p.default_value for i in st.session_state["_states"].values() for p in i]
+        )
+        disable = currentuse <= default
+        disable = st.session_state.get(f"_{key1}", False) and not disable
+    else:
+        disable = False
     if st.toggle(
         togtext,
         key=f"_{key1}",
@@ -43,9 +46,9 @@ def gdbint(
             args=[key2, key3],
             label_visibility="collapsed",
         )
-        if disable:
+        if key1 == "max_points_toggle" and disable:
             st.info(
-                "You cannot turn off the override because your current point usage exceeds the default maximum of 100. Reduce your point usage to turn off this feature."
+                "You cannot turn off the override because your current point usage exceeds the default maximum of 100. Lower your point usage to a minimum of 100 to turn off this feature."
             )
     else:
         st.session_state[f"_{key2}"] = default
@@ -54,7 +57,14 @@ def gdbint(
     store_value(key3)
 
 
-def gdbstr(key1: str, key2: str, key3: str, togtext: str, inptext: str, default: int):
+def gdbstr(
+    key1: str,
+    key2: str,
+    key3: str,
+    togtext: str,
+    inptext: str,
+    default: int,
+):
     load_value(key1)
     load_value(key2)
     load_value(key3)
@@ -72,6 +82,12 @@ def gdbstr(key1: str, key2: str, key3: str, togtext: str, inptext: str, default:
             args=[key2, key3],
             label_visibility="collapsed",
         )
+        if key1 == "graph_cscale_toggle":
+            if st.button("See all color scales"):
+                st.write(
+                    "To use a specific scale, write the name associated with it on the left. Case insensitive"
+                )
+                st.plotly_chart(px.colors.sequential.swatches_continuous())
     else:
         st.session_state[f"_{key2}"] = default
     store_value(key1)
@@ -88,13 +104,22 @@ gdbint(
     sum([p.default_value for i in st.session_state["_states"].values() for p in i]),
     1000,
     100,
-    st.session_state["states"],
 )
-gdbstr(
+gdbint(
     "table_round_toggle",
     "table_round_value",
     "table_round_retention",
     "Override decimal rounding in tables",
-    'New number of decimal points ("None" for no rounding)',
+    "New number of decimal points",
+    0,
+    10,
     2,
+)
+gdbstr(
+    "graph_cscale_toggle",
+    "graph_cscale_value",
+    "graph_cscale_retention",
+    "Override color scale of graph",
+    'New color scale ("None" for no rounding)',
+    "reds",
 )
